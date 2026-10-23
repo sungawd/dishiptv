@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Streamline IPTV</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--line:#2a2f3a;--text:#e8eaf0;--muted:#8b93a5;--accent:#4f8cff;--warn:#ffb347;--bad:#ff6b6b}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+input,select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+.app{display:grid;grid-template-columns:340px 1fr;height:100dvh}
+.side{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-right:1px solid var(--line)}
+.side .top{padding:12px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+.row{display:flex;gap:8px}
+.tabs{display:flex;gap:6px}
+.tabs button{flex:1;padding:6px 4px;font-size:13px}
+.tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.list{flex:1;overflow:auto;min-height:0;-webkit-overflow-scrolling:touch}
+.ch{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.ch:hover{background:var(--panel2)}
+.ch.on{background:#1d2a45}
+.ch img,.ch .ph{width:40px;height:40px;border-radius:6px;object-fit:contain;background:#0b0d11;flex:none}
+.ch .ph{display:grid;place-items:center;color:var(--muted);font-size:12px}
+.ch .meta{flex:1;min-width:0}
+.ch .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch .gp{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.star{background:none;border:none;font-size:18px;padding:4px 6px;color:var(--muted)}
+.star.on{color:#ffd24d}
+.empty{padding:28px 16px;color:var(--muted);text-align:center}
+.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.stage{position:relative;background:#000;flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+video{width:100%;height:100%;background:#000}
+.msg{position:absolute;left:12px;right:12px;bottom:12px;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,.75);border:1px solid var(--warn);color:var(--warn);display:none}
+.msg.bad{border-color:var(--bad);color:var(--bad)}
+.hero{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);text-align:center;padding:20px;pointer-events:none}
+.bar{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--panel);border-top:1px solid var(--line)}
+.bar .now{flex:1;min-width:0}
+.bar .now b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .now span{color:var(--muted);font-size:12px}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:18px;width:min(440px,92vw)}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog h3{margin:0 0 12px}
+dialog label{display:block;margin:10px 0 4px;color:var(--muted);font-size:13px}
+.hint{color:var(--muted);font-size:12px;margin-top:6px}
+.hide{display:none!important}
+@media (max-width:800px){
+  .app{display:flex;flex-direction:column}
+  .main{order:-1;flex:none}
+  .stage{flex:none;aspect-ratio:16/9}
+  .side{flex:1;border-right:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="top">
+      <div class="row">
+        <select id="plSel" title="Playlist"></select>
+        <button id="btnAdd" class="primary" title="Add playlist">+</button>
+        <button id="btnRefresh" title="Refresh playlist">↻</button>
+        <button id="btnDel" title="Remove playlist">🗑</button>
+      </div>
+      <input id="q" type="search" placeholder="Search channels  ( / )" autocomplete="off">
+      <select id="grp"></select>
+      <div class="tabs">
+        <button data-view="all" class="on">All</button>
+        <button data-view="fav">★ Favorites</button>
+        <button data-view="recent">Recent</button>
+      </div>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+
+  <section class="main">
+    <div class="stage">
+      <video id="video" controls playsinline autoplay></video>
+      <div class="hero" id="hero"><div><div style="font-size:42px">📺</div>Add a playlist, then pick a channel.</div></div>
+      <div class="msg" id="msg"></div>
+    </div>
+    <div class="bar">
+      <button id="btnPrev" title="Previous (↑)">⏮</button>
+      <div class="now"><b id="nowName">Nothing playing</b><span id="nowGroup"></span></div>
+      <button id="btnFav" title="Favorite">☆</button>
+      <button id="btnPip" title="Picture in picture">⧉</button>
+      <button id="btnFs" title="Fullscreen (f)">⛶</button>
+      <button id="btnNext" title="Next (↓)">⏭</button>
+    </div>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <h3>Add playlist</h3>
+  <label>Type</label>
+  <select id="pType">
+    <option value="m3u">M3U / M3U8 URL</option>
+    <option value="xtream">Xtream login (server, user, password)</option>
+    <option value="file">M3U file from this device</option>
+  </select>
+  <label>Name</label>
+  <input id="pName" placeholder="My playlist">
+  <div id="fM3u">
+    <label>Playlist URL</label>
+    <input id="pUrl" placeholder="https://example.com/playlist.m3u">
+  </div>
+  <div id="fXt" class="hide">
+    <label>Server URL</label>
+    <input id="xServer" placeholder="http://provider.example:8080">
+    <label>Username</label>
+    <input id="xUser" autocomplete="off">
+    <label>Password</label>
+    <input id="xPass" type="password" autocomplete="off">
+  </div>
+  <div id="fFile" class="hide">
+    <label>File</label>
+    <input id="pFile" type="file" accept=".m3u,.m3u8,.txt,audio/x-mpegurl,application/vnd.apple.mpegurl">
+  </div>
+  <label>CORS proxy prefix (optional)</label>
+  <input id="pProxy" placeholder="only if your playlist host blocks browsers">
+  <div class="hint">Use only playlists and services you have the right to access. The app stores everything locally in your browser.</div>
+  <div class="row" style="margin-top:16px;justify-content:flex-end">
+    <button id="dCancel">Cancel</button>
+    <button id="dSave" class="primary">Add</button>
+  </div>
+  <div class="hint" id="dErr" style="color:var(--bad)"></div>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.17/hls.min.js"></script>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+
+/* ---------- storage ---------- */
+const LS = {
+  get(k, d){ try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const idb = (() => {
+  let p;
+  const open = () => p || (p = new Promise((res, rej) => {
+    const r = indexedDB.open('streamline', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('ch');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  }));
+  const tx = async (mode, fn) => {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const t = db.transaction('ch', mode);
+      const rq = fn(t.objectStore('ch'));
+      t.oncomplete = () => res(rq && rq.result);
+      t.onerror = () => rej(t.error);
+    });
+  };
+  return {
+    get: k => tx('readonly', s => s.get(k)),
+    set: (k, v) => tx('readwrite', s => s.put(v, k)),
+    del: k => tx('readwrite', s => s.delete(k))
+  };
+})();
+
+/* ---------- state ---------- */
+let playlists = LS.get('sl.playlists', []);
+let activeId = LS.get('sl.active', null);
+let favs = new Set(LS.get('sl.favs', []));
+let recent = LS.get('sl.recent', []);
+let channels = [], filtered = [], shown = 0, view = 'all', group = '', query = '', current = null;
+const CHUNK = 120;
+
+/* ---------- parsing ---------- */
+function parseM3U(text){
+  const out = []; let cur = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('#EXTINF')) {
+      const a = {};
+      line.replace(/([\w-]+)="([^"]*)"/g, (_, k, v) => { a[k.toLowerCase()] = v; return ''; });
+      let q = false, ci = -1;
+      for (let k = 0; k < line.length; k++) {
+        const ch = line[k];
+        if (ch === '"') q = !q;
+        else if (ch === ',' && !q) { ci = k; break; }
+      }
+      const name = (ci >= 0 ? line.slice(ci + 1) : '').trim() || a['tvg-name'] || 'Unnamed';
+      cur = { name, logo: a['tvg-logo'] || '', group: a['group-title'] || '' };
+    } else if (line.startsWith('#EXTGRP:')) {
+      if (cur && !cur.group) cur.group = line.slice(8).trim();
+    } else if (!line.startsWith('#')) {
+      if (cur) { cur.url = line; out.push(cur); cur = null; }
+    }
+  }
+  return out;
+}
+
+async function fetchText(url, proxy){
+  const r = await fetch((proxy || '') + url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.text();
+}
+
+async function loadXtream(p){
+  const base = p.server.replace(/\/+$/, '');
+  const api = a => `${base}/player_api.php?username=${encodeURIComponent(p.user)}&password=${encodeURIComponent(p.pass)}&action=${a}`;
+  const get = async a => { const r = await fetch((p.proxy || '') + api(a)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); };
+  const [cats, streams] = await Promise.all([get('get_live_categories'), get('get_live_streams')]);
+  if (!Array.isArray(streams)) throw new Error('Login rejected or no live streams returned');
+  const cm = {};
+  (cats || []).forEach(c => cm[c.category_id] = c.category_name);
+  return streams.map(s => ({
+    name: s.name || 'Unnamed',
+    logo: s.stream_icon || '',
+    group: cm[s.category_id] || '',
+    url: `${base}/live/${encodeURIComponent(p.user)}/${encodeURIComponent(p.pass)}/${s.stream_id}.m3u8`
+  }));
+}
+
+async function fetchChannels(p){
+  if (p.type === 'xtream') return loadXtream(p);
+  if (p.type === 'm3u') return parseM3U(await fetchText(p.url, p.proxy));
+  throw new Error('File playlists must be re-added to refresh');
+}
+
+/* ---------- playlists ---------- */
+function renderPlaylistSelect(){
+  const s = $('#plSel');
+  s.innerHTML = '';
+  if (!playlists.length) { s.innerHTML = '<option>No playlists yet</option>'; return; }
+  playlists.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id; o.textContent = p.name;
+    if (p.id === activeId) o.selected = true;
+    s.appendChild(o);
+  });
+}
+
+async function openPlaylist(id, forceRefresh){
+  const p = playlists.find(x => x.id === id);
+  if (!p) { channels = []; applyFilters(); return; }
+  activeId = id; LS.set('sl.active', id); renderPlaylistSelect();
+  $('#list').innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    let data = forceRefresh ? null : await idb.get('ch:' + id);
+    if (!data) {
+      data = await fetchChannels(p);
+      await idb.set('ch:' + id, data);
+    }
+    channels = data;
+  } catch (e) {
+    channels = [];
+    $('#list').innerHTML = `<div class="empty">Could not load playlist.<br>${esc(e.message)}<br><br>
+      If it's a CORS error, set a CORS proxy prefix or use a file upload.</div>`;
+    return;
+  }
+  buildGroups(); applyFilters();
+}
+
+function buildGroups(){
+  const g = [...new Set(channels.map(c => c.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const s = $('#grp');
+  s.innerHTML = '<option value="">All groups</option>' + g.map(x => `<option>${esc(x)}</option>`).join('');
+  group = ''; s.value = '';
+}
+
+/* ---------- list ---------- */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function applyFilters(){
+  const q = query.trim().toLowerCase();
+  let src = channels;
+  if (view === 'fav') src = channels.filter(c => favs.has(c.url));
+  else if (view === 'recent') {
+    const byUrl = new Map(channels.map(c => [c.url, c]));
+    src = recent.map(u => byUrl.get(u)).filter(Boolean);
+  }
+  filtered = src.filter(c => (!group || c.group === group) && (!q || c.name.toLowerCase().includes(q)));
+  shown = 0;
+  $('#list').innerHTML = '';
+  $('#list').scrollTop = 0;
+  if (!filtered.length) {
+    $('#list').innerHTML = `<div class="empty">${channels.length ? 'No channels match.' : 'Add a playlist with the + button.'}</div>`;
+    return;
+  }
+  renderMore();
+}
+
+function renderMore(){
+  if (shown >= filtered.length) return;
+  const frag = document.createDocumentFragment();
+  filtered.slice(shown, shown + CHUNK).forEach((c, i) => {
+    const d = document.createElement('div');
+    d.className = 'ch' + (current && current.url === c.url ? ' on' : '');
+    d.dataset.i = shown + i;
+    d.innerHTML = (c.logo ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(c.logo)}" alt="">` : `<div class="ph">TV</div>`) +
+      `<div class="meta"><div class="nm">${esc(c.name)}</div><div class="gp">${esc(c.group)}</div></div>` +
+      `<button class="star${favs.has(c.url) ? ' on' : ''}" data-star="1">${favs.has(c.url) ? '★' : '☆'}</button>`;
+    const img = d.querySelector('img');
+    if (img) img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), { className: 'ph', textContent: 'TV' })); };
+    frag.appendChild(d);
+  });
+  shown += CHUNK;
+  $('#list').appendChild(frag);
+}
+
+$('#list').addEventListener('scroll', e => {
+  const l = e.target;
+  if (l.scrollTop + l.clientHeight > l.scrollHeight - 400) renderMore();
+});
+$('#list').addEventListener('click', e => {
+  const row = e.target.closest('.ch'); if (!row) return;
+  const c = filtered[+row.dataset.i];
+  if (e.target.dataset.star) { toggleFav(c); return; }
+  play(c);
+});
+
+function toggleFav(c){
+  if (!c) return;
+  favs.has(c.url) ? favs.delete(c.url) : favs.add(c.url);
+  LS.set('sl.favs', [...favs]);
+  if (view === 'fav') applyFilters();
+  else document.querySelectorAll('.ch').forEach(r => {
+    const x = filtered[+r.dataset.i];
+    if (x) { const b = r.querySelector('.star'); b.classList.toggle('on', favs.has(x.url)); b.textContent = favs.has(x.url) ? '★' : '☆'; }
+  });
+  updateNow();
+}
+
+/* ---------- player ---------- */
+const video = $('#video');
+let hls = null;
+
+function showMsg(t, bad){
+  const m = $('#msg');
+  m.textContent = t; m.className = 'msg' + (bad ? ' bad' : ''); m.style.display = t ? 'block' : 'none';
+}
+
+function play(c){
+  if (!c) return;
+  current = c; $('#hero').classList.add('hide'); showMsg('');
+  recent = [c.url, ...recent.filter(u => u !== c.url)].slice(0, 30);
+  LS.set('sl.recent', recent);
+  if (hls) { hls.destroy(); hls = null; }
+  video.removeAttribute('src'); video.load();
+  const u = c.url;
+
+  if (location.protocol === 'https:' && u.startsWith('http:')) {
+    showMsg('This stream is plain http but the app is on https, so the browser blocks it. Open the app over http (e.g. locally) or use a stream with https.', true);
+  }
+
+  const looksHls = /\.m3u8(\?|$)/i.test(u) || (!/\.(ts|mp4|mkv|avi|flv)(\?|$)/i.test(u) && /\/live\//.test(u));
+  if (looksHls && window.Hls && Hls.isSupported()) {
+    hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+    hls.loadSource(u); hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+    hls.on(Hls.Events.ERROR, (_, d) => {
+      if (!d.fatal) return;
+      if (d.type === Hls.ErrorTypes.NETWORK_ERROR) showMsg('Network error: stream offline, or the server blocks browser access (CORS).', true);
+      else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+      else { showMsg('Playback failed for this stream.', true); hls.destroy(); hls = null; }
+    });
+  } else {
+    video.src = u;
+    video.play().catch(() => {});
+  }
+  updateNow();
+  document.querySelectorAll('.ch').forEach(r => {
+    const x = filtered[+r.dataset.i];
+    r.classList.toggle('on', !!x && x.url === c.url);
+  });
+  if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: c.name, artist: c.group });
+}
+video.addEventListener('error', () => { if (!hls && current) showMsg('This browser cannot play this stream format (raw .ts/mkv needs a desktop app like VLC).', true); });
+
+function updateNow(){
+  $('#nowName').textContent = current ? current.name : 'Nothing playing';
+  $('#nowGroup').textContent = current ? current.group : '';
+  $('#btnFav').textContent = current && favs.has(current.url) ? '★' : '☆';
+}
+function step(d){
+  if (!filtered.length) return;
+  let i = current ? filtered.findIndex(c => c.url === current.url) : -1;
+  i = (i + d + filtered.length) % filtered.length;
+  while (i >= shown) renderMore();
+  play(filtered[i]);
+  const row = document.querySelector(`.ch[data-i="${i}"]`);
+  if (row) row.scrollIntoView({ block: 'nearest' });
+}
+
+/* ---------- controls ---------- */
+$('#btnPrev').onclick = () => step(-1);
+$('#btnNext').onclick = () => step(1);
+$('#btnFav').onclick = () => toggleFav(current);
+$('#btnFs').onclick = () => { document.fullscreenElement ? document.exitFullscreen() : (video.parentElement.requestFullscreen?.() || video.webkitEnterFullscreen?.()); };
+$('#btnPip').onclick = () => { if (document.pictureInPictureEnabled) document.pictureInPictureElement ? document.exitPictureInPicture() : video.requestPictureInPicture().catch(() => {}); };
+$('#plSel').onchange = e => openPlaylist(e.target.value);
+$('#grp').onchange = e => { group = e.target.value; applyFilters(); };
+$('#btnRefresh').onclick = () => activeId && openPlaylist(activeId, true);
+$('#btnDel').onclick = async () => {
+  const p = playlists.find(x => x.id === activeId);
+  if (!p || !confirm(`Remove "${p.name}"?`)) return;
+  playlists = playlists.filter(x => x.id !== p.id); LS.set('sl.playlists', playlists);
+  await idb.del('ch:' + p.id).catch(() => {});
+  activeId = playlists[0]?.id || null; LS.set('sl.active', activeId);
+  renderPlaylistSelect(); openPlaylist(activeId);
+};
+let qt;
+$('#q').oninput = e => { clearTimeout(qt); qt = setTimeout(() => { query = e.target.value; applyFilters(); }, 150); };
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  view = b.dataset.view; applyFilters();
+});
+document.addEventListener('keydown', e => {
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.key !== 'Escape') return;
+  if (e.key === '/') { e.preventDefault(); $('#q').focus(); }
+  else if (e.key === ' ') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+  else if (e.key === 'f') $('#btnFs').click();
+  else if (e.key === 'm') video.muted = !video.muted;
+  else if (e.key === 'ArrowDown') { e.preventDefault(); step(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); step(-1); }
+});
+
+/* ---------- add dialog ---------- */
+const dlg = $('#dlg');
+function syncType(){
+  const t = $('#pType').value;
+  $('#fM3u').classList.toggle('hide', t !== 'm3u');
+  $('#fXt').classList.toggle('hide', t !== 'xtream');
+  $('#fFile').classList.toggle('hide', t !== 'file');
+}
+$('#pType').onchange = syncType;
+$('#btnAdd').onclick = () => { $('#dErr').textContent = ''; syncType(); dlg.showModal(); };
+$('#dCancel').onclick = () => dlg.close();
+$('#dSave').onclick = async () => {
+  const t = $('#pType').value, err = $('#dErr'), btn = $('#dSave');
+  const proxy = $('#pProxy').value.trim();
+  const p = { id: Date.now().toString(36), type: t === 'file' ? 'file' : t, name: $('#pName').value.trim(), proxy };
+  err.textContent = '';
+  try {
+    let data;
+    btn.disabled = true; btn.textContent = 'Loading…';
+    if (t === 'm3u') {
+      p.url = $('#pUrl').value.trim();
+      if (!/^https?:\/\//i.test(p.url)) throw new Error('Enter a valid http(s) URL');
+      p.name ||= new URL(p.url).hostname;
+      data = await fetchChannels(p);
+    } else if (t === 'xtream') {
+      p.server = $('#xServer').value.trim(); p.user = $('#xUser').value.trim(); p.pass = $('#xPass').value;
+      if (!/^https?:\/\//i.test(p.server) || !p.user) throw new Error('Server URL and username are required');
+      p.name ||= p.user + '@' + new URL(p.server).hostname;
+      data = await fetchChannels(p);
+    } else {
+      const f = $('#pFile').files[0];
+      if (!f) throw new Error('Choose a file');
+      p.name ||= f.name;
+      data = parseM3U(await f.text());
+    }
+    if (!data.length) throw new Error('No channels found in that playlist');
+    await idb.set('ch:' + p.id, data);
+    playlists.push(p); LS.set('sl.playlists', playlists);
+    dlg.close();
+    await openPlaylist(p.id);
+  } catch (e) {
+    err.textContent = (e.message || 'Failed') + (/fetch|Failed|NetworkError/i.test(e.message) ? ' (possible CORS block: try a proxy prefix or upload the file)' : '');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Add';
+  }
+};
+
+/* ---------- boot ---------- */
+renderPlaylistSelect();
+if (activeId) openPlaylist(activeId); else applyFilters();
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
